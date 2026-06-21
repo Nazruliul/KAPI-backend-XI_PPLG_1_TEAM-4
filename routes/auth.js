@@ -1,42 +1,85 @@
+require('dotenv').config();
 const express = require('express');
 const bcrypt  = require('bcryptjs');
 const jwt     = require('jsonwebtoken');
-const router  = express.Router();
+const pool    = require('../db/pool');
 
-const SECRET = 'kunci_rahasia_123';
-
-const users = [];
+const router = express.Router();
+const SECRET = process.env.JWT_SECRET;
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { username, password } = req.body;
+  try {
+    const { nama, username, password, role } = req.body;
 
-  if (!username || !password)
-    return res.status(400).json({ message: 'Username dan password wajib diisi' });
+    if (!nama || !username || !password) {
+      return res.status(400).json({ message: 'Nama, username, dan password wajib diisi' });
+    }
 
-  const sudahAda = users.find(u => u.username === username);
-  if (sudahAda)
-    return res.status(409).json({ message: 'Username sudah dipakai' });
+    const [existing] = await pool.query(
+      'SELECT id FROM users WHERE username = ?',
+      [username]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({ message: 'Username sudah dipakai' });
+    }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
-  const user = { id: users.length + 1, username, password: hashedPassword };
-  users.push(user);
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const finalRole = role === 'admin' ? 'admin' : 'kasir';
 
-  res.status(201).json({ message: 'Registrasi berhasil', user: { id: user.id, username } });
+    const [result] = await pool.query(
+      'INSERT INTO users (nama, username, password, role) VALUES (?, ?, ?, ?)',
+      [nama, username, hashedPassword, finalRole]
+    );
+
+    res.status(201).json({
+      message: 'Registrasi berhasil',
+      user: { id: result.insertId, nama, username, role: finalRole }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
 // POST /api/auth/login
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+  try {
+    const { username, password } = req.body;
 
-  const user = users.find(u => u.username === username);
-  if (!user) return res.status(401).json({ message: 'Username tidak ditemukan' });
+    if (!username || !password) {
+      return res.status(400).json({ message: 'Username dan password wajib diisi' });
+    }
 
-  const cocok = await bcrypt.compare(password, user.password);
-  if (!cocok) return res.status(401).json({ message: 'Password salah' });
+    const [rows] = await pool.query(
+      'SELECT * FROM users WHERE username = ?',
+      [username]
+    );
+    if (rows.length === 0) {
+      return res.status(401).json({ message: 'Username tidak ditemukan' });
+    }
 
-  const token = jwt.sign({ id: user.id, username }, SECRET, { expiresIn: '1h' });
-  res.json({ message: 'Login berhasil', token });
+    const user = rows[0];
+    const cocok = await bcrypt.compare(password, user.password);
+    if (!cocok) {
+      return res.status(401).json({ message: 'Password salah' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      SECRET,
+      { expiresIn: '8h' }
+    );
+
+    res.json({
+      message: 'Login berhasil',
+      token,
+      user: { id: user.id, nama: user.nama, username: user.username, role: user.role }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
 module.exports = router;

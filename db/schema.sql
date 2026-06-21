@@ -1,0 +1,37 @@
+CREATE TABLE IF NOT EXISTS users (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama VARCHAR(100) NOT NULL,
+  username VARCHAR(50) NOT NULL UNIQUE,
+  password VARCHAR(255) NOT NULL,
+  role ENUM('admin', 'kasir') NOT NULL DEFAULT 'kasir',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS produk (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  nama VARCHAR(150) NOT NULL,
+  harga INT NOT NULL,
+  stok INT NOT NULL DEFAULT 0,
+  kategori VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS transaksi (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  total INT NOT NULL,
+  bayar INT NOT NULL,
+  kembalian INT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS transaksi_item (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  transaksi_id INT NOT NULL,
+  produk_id INT NOT NULL,
+  qty INT NOT NULL,
+  subtotal INT NOT NULL,
+  FOREIGN KEY (transaksi_id) REFERENCES transaksi(id),
+  FOREIGN KEY (produk_id) REFERENCES produk(id)
+);

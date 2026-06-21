@@ -1,53 +1,87 @@
-const express    = require('express');
-const router     = express.Router();
-const authMiddleware = require('../middleware/auth');
+const express = require('express');
+const router = express.Router();
+const pool = require('../db/pool');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 router.use(authMiddleware);
 
-let products = [
-  { id: 1, nama: 'Kopi Arabika', harga: 45000, stok: 100 },
-  { id: 2, nama: 'Teh Hijau',    harga: 25000, stok: 200 },
-];
-let nextId = 3;
-
 // GET /api/products
-router.get('/', (req, res) => {
-  res.json({ products });
+router.get('/', async (req, res) => {
+  try {
+    const [products] = await pool.query('SELECT * FROM produk ORDER BY id DESC');
+    res.json({ products });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
-// POST /api/products
-router.post('/', (req, res) => {
-  const { nama, harga, stok } = req.body;
+// POST /api/products  (khusus admin)
+router.post('/', adminOnly, async (req, res) => {
+  try {
+    const { nama, harga, stok, kategori } = req.body;
 
-  if (!nama || harga == null || stok == null)
-    return res.status(400).json({ message: 'nama, harga, dan stok wajib diisi' });
+    if (!nama || harga == null || stok == null) {
+      return res.status(400).json({ message: 'nama, harga, dan stok wajib diisi' });
+    }
 
-  const product = { id: nextId++, nama, harga, stok };
-  products.push(product);
-  res.status(201).json({ message: 'Produk ditambahkan', product });
+    const [result] = await pool.query(
+      'INSERT INTO produk (nama, harga, stok, kategori) VALUES (?, ?, ?, ?)',
+      [nama, harga, stok, kategori || null]
+    );
+
+    res.status(201).json({
+      message: 'Produk ditambahkan',
+      product: { id: result.insertId, nama, harga, stok, kategori: kategori || null }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
-// PUT /api/products/:id
-router.put('/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = products.findIndex(p => p.id === id);
+// PUT /api/products/:id  (khusus admin)
+router.put('/:id', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { nama, harga, stok, kategori } = req.body;
 
-  if (index === -1) return res.status(404).json({ message: 'Produk tidak ditemukan' });
+    const [existing] = await pool.query('SELECT * FROM produk WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Produk tidak ditemukan' });
+    }
 
-  const { nama, harga, stok } = req.body;
-  products[index] = { ...products[index], nama, harga, stok };
-  res.json({ message: 'Produk diperbarui', product: products[index] });
+    await pool.query(
+      'UPDATE produk SET nama = ?, harga = ?, stok = ?, kategori = ? WHERE id = ?',
+      [nama, harga, stok, kategori || null, id]
+    );
+
+    res.json({
+      message: 'Produk diperbarui',
+      product: { id, nama, harga, stok, kategori: kategori || null }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
-// DELETE /api/products/:id
-router.delete('/:id', (req, res) => {
-  const id = parseInt(req.params.id);
-  const index = products.findIndex(p => p.id === id);
+// DELETE /api/products/:id  (khusus admin)
+router.delete('/:id', adminOnly, async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
 
-  if (index === -1) return res.status(404).json({ message: 'Produk tidak ditemukan' });
+    const [existing] = await pool.query('SELECT * FROM produk WHERE id = ?', [id]);
+    if (existing.length === 0) {
+      return res.status(404).json({ message: 'Produk tidak ditemukan' });
+    }
 
-  products.splice(index, 1);
-  res.json({ message: 'Produk dihapus' });
+    await pool.query('DELETE FROM produk WHERE id = ?', [id]);
+    res.json({ message: 'Produk dihapus' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Terjadi kesalahan server' });
+  }
 });
 
 module.exports = router;
