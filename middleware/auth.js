@@ -18,11 +18,14 @@ function authMiddleware(req, res, next) {
   }
 }
 
-function adminOnly(req, res, next) {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: 'Hanya admin yang boleh mengakses ini' });
-  }
-  next();
+function authorize(...allowedRoles) {
+  return (req, res, next) => {
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Anda tidak punya akses untuk aksi ini' });
+    }
+    next();
+  };
 }
+
 
 module.exports = { authMiddleware, adminOnly };
